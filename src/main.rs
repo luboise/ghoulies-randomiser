@@ -6,38 +6,54 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{Constraint, Layout, Rect},
     style::Stylize,
-    widgets::{Paragraph, Widget},
+    widgets::{List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
 use color_eyre::Result;
 
-use crate::main_list::{MainOption, MainOptionsList};
+use crate::{
+    main_list::{MainOption, MainOptionsList},
+    randomiser::RandomiserState,
+    styles::FOCUSED_STYLE,
+};
 
 mod main_list;
+
+mod randomiser;
 
 #[derive(Debug)]
 struct App {
     should_exit: bool,
     main_options_list: MainOptionsList,
-    seed: u64,
+    randomiser_state: RandomiserState,
+    randomiser_list_state: ListState,
 }
 
 impl Default for App {
     fn default() -> Self {
         Self {
             should_exit: false,
-            seed: rand::random(),
+            randomiser_state: Default::default(),
             main_options_list: Default::default(),
+            randomiser_list_state: Default::default(),
         }
     }
 }
 
 impl App {
     fn render_header(area: Rect, buf: &mut Buffer) {
+        let [title_area, version_area] =
+            Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(area);
+
         Paragraph::new("Ghoulies Randomiser")
             .bold()
-            .centered()
-            .render(area, buf);
+            .left_aligned()
+            .render(title_area, buf);
+
+        Paragraph::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+            .bold()
+            .right_aligned()
+            .render(version_area, buf);
     }
 }
 
@@ -61,6 +77,7 @@ impl App {
     fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         // Select the first option on startup
         self.main_options_list.list_state.select_first();
+        self.randomiser_state.list_state.select_first();
 
         while !self.should_exit {
             terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
@@ -71,11 +88,9 @@ impl App {
         Ok(())
     }
 
-    fn render_main_item(&self, area: Rect, buf: &mut Buffer) {
+    fn render_main_item(&mut self, area: Rect, buf: &mut Buffer) {
         match self.main_options_list.current_hovered_status() {
-            MainOption::CreateRandomiser => {
-                Paragraph::new("Create randomiser").render(area, buf);
-            }
+            MainOption::CreateRandomiser => self.randomiser_state.render(area, buf),
             MainOption::BuildAssetLibrary => {
                 Paragraph::new("Build asset library coming soon").render(area, buf);
             }
@@ -95,7 +110,8 @@ impl App {
     fn go_back(&mut self) {
         if self.main_options_list.focused() {
             self.should_exit = true;
-        } else {
+        } else if self.randomiser_state.focused() {
+            self.randomiser_state.set_focused(false);
             self.main_options_list.set_focused(true);
         }
     }
@@ -114,7 +130,14 @@ impl App {
             // KeyCode::Char('G') | KeyCode::End => self.main_options_list.list_state.select_last(),
             KeyCode::Enter => {
                 if self.main_options_list.focused() {
-                    self.main_options_list.set_focused(false)
+                    match self.main_options_list.current_hovered_status() {
+                        MainOption::CreateRandomiser => {
+                            self.randomiser_state.set_focused(true);
+                        }
+                        MainOption::BuildAssetLibrary => return,
+                    }
+
+                    self.main_options_list.set_focused(false);
                 }
             }
             _ => {}
@@ -125,7 +148,7 @@ impl App {
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [header_area, main_area, footer_area] = Layout::vertical([
-            Constraint::Length(2),
+            Constraint::Length(1),
             Constraint::Fill(1),
             Constraint::Length(1),
         ])

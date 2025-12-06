@@ -57,7 +57,7 @@ impl MainOptionsList {
         const NORMAL_ROW_BG: Color = SLATE.c950;
 
         let block = Block::new()
-            .title(Line::raw("TODO List").centered())
+            .title(Line::raw("Options").centered())
             .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)
             .border_set(symbols::border::EMPTY)
             .border_style(TODO_HEADER_STYLE)
