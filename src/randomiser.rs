@@ -1,3 +1,11 @@
+use std::{env, fs, path::Path};
+
+use bnl::{
+    BNLError, BNLFile,
+    asset::{Asset, aidlist::AidList},
+    modding::Mod,
+};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -9,6 +17,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, StatefulWidget},
 };
+use regex::Regex;
 
 use crate::styles::FOCUSED_STYLE;
 
@@ -40,7 +49,7 @@ impl RandomiserOption {
     }
 
     pub fn as_list_item_tree(&self, depth: usize) -> Vec<ListItem> {
-        let mut items = vec![self.as_list_item(depth)];
+        let items = vec![self.as_list_item(depth)];
 
         /*
         self.children.iter().for_each(|child| {
@@ -162,6 +171,14 @@ impl RandomiserState {
             eprintln!("Error: No value selected in MainOptionsList. Unable to trigger.");
             return;
         };
+
+        // If we selected the last option
+        if index == self.root_options.len() {
+            randomise_game(self, env::args().collect::<Vec<String>>().get(1).unwrap())
+                .expect("Failed to randomise game.");
+            return;
+        }
+
         let Some(option) = self.root_options.get_mut(index) else {
             return;
         };
@@ -184,12 +201,14 @@ impl RandomiserState {
             .border_style(TODO_HEADER_STYLE)
             .bg(NORMAL_ROW_BG);
 
-        let items: Vec<ListItem> = {
+        let mut items: Vec<ListItem> = {
             self.root_options
                 .iter()
                 .flat_map(|root_option| root_option.as_list_item_tree(0))
                 .collect()
         };
+
+        items.push(ListItem::new("Create."));
 
         let list = if self.focused {
             List::new(items)
@@ -206,4 +225,79 @@ impl RandomiserState {
 
         StatefulWidget::render(list, area, buf, &mut self.list_state);
     }
+}
+
+pub fn randomise_game<P: AsRef<Path>>(
+    state: &RandomiserState,
+    common_bnl_path: P,
+) -> Result<(), BNLError> {
+    let mut bnl = BNLFile::from_bytes(&fs::read(&common_bnl_path)?)?;
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+
+    let out_dir = "./out";
+
+    let mut randomiser_mod = Mod::new("Randomiser");
+
+    let mut rng = StdRng::seed_from_u64(match state.root_options.get(2).unwrap().value {
+        RandomiserOptionValue::Uint64(seed) => seed,
+        _ => 0,
+    });
+
+    let randomise_rooms =
+        if let RandomiserOptionValue::Bool(b) = state.root_options.get(0).unwrap().value {
+            b
+        } else {
+            false
+        };
+
+    let remove_book_cutscenes =
+        if let RandomiserOptionValue::Bool(b) = state.root_options.get(1).unwrap().value {
+            b
+        } else {
+            false
+        };
+
+    randomiser_mod.overrides_mut();
+
+    let re = Regex::new(r"aid_script_ghoulies_.*scene[0-9]+_.*[book].*").unwrap();
+
+    bnl.modify_asset(
+        "aid_aidlist_ghoulies_sceneorder_game",
+        |list: &mut Asset<AidList>| {
+            if randomise_rooms {
+                list.asset_mut().asset_ids_mut()[3..130].shuffle(&mut rng);
+            }
+
+            if remove_book_cutscenes {
+                list.asset_mut()
+                    .asset_ids_mut()
+                    .retain(|aid| !re.is_match(aid));
+            }
+
+            Ok(())
+        },
+    )
+    .expect("Failed to remove aidlist");
+
+    fs::create_dir_all(out_dir).expect("Failed to create out dir.");
+
+    fs::copy(
+        &common_bnl_path,
+        format!(
+            "{out_dir}/{}_backup_{}",
+            &common_bnl_path
+                .as_ref()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            timestamp
+        ),
+    )
+    .expect("Failed to backup bnl file.");
+
+    fs::write(common_bnl_path, bnl.to_bytes()).expect("Failed to write new bnl.");
+
+    Ok(())
 }
