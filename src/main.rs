@@ -4,9 +4,12 @@ use ratatui::{
     DefaultTerminal,
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
-    layout::{Constraint, Layout, Rect},
+    layout::{
+        Alignment::{self, Left, Right},
+        Constraint, Flex, Layout, Rect,
+    },
     style::Stylize,
-    widgets::{List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
 use color_eyre::Result;
@@ -54,6 +57,26 @@ impl App {
             .bold()
             .right_aligned()
             .render(version_area, buf);
+    }
+
+    fn render_footer(area: Rect, buf: &mut Buffer) {
+        const TITLE_LABEL: &str = "Controls";
+
+        let [title_area, content_area] = Layout::horizontal([
+            Constraint::Length((TITLE_LABEL.len() + 2) as u16),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+
+        Paragraph::new(TITLE_LABEL).render(title_area, buf);
+
+        const CONTROLS: [&str; 3] = ["←↓↑→/hjkl - Move", "Enter - Select", "q/Esc - Go Back"];
+
+        let block = Block::new()
+            .title_alignment(Alignment::Right)
+            .title(CONTROLS.join("    "));
+
+        block.render(content_area, buf);
     }
 }
 
@@ -138,6 +161,8 @@ impl App {
                     }
 
                     self.main_options_list.set_focused(false);
+                } else if self.randomiser_state.focused() {
+                    self.randomiser_state.trigger();
                 }
             }
             _ => {}
@@ -163,7 +188,7 @@ impl Widget for &mut App {
         self.render_main_item(item_area, buf);
         self.main_options_list.render(list_area, buf);
 
-        // App::render_footer(footer_area, buf);
+        App::render_footer(footer_area, buf);
         // self.render_selected_item(item_area, buf);
     }
 }

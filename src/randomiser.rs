@@ -28,12 +28,16 @@ pub struct RandomiserOption {
 
 impl RandomiserOption {
     pub fn as_list_item(&self, depth: usize) -> ListItem {
-        ListItem::new(format!(
-            "{:>width$} {}",
-            "",
-            self.name.clone(),
-            width = depth * 4
-        ))
+        let text = match self.value {
+            RandomiserOptionValue::Bool(bool) => {
+                format!("{} {}", if bool { "☑" } else { "☐" }, self.name)
+            }
+            RandomiserOptionValue::Float(_) | RandomiserOptionValue::Uint64(_) => {
+                self.name.to_string()
+            }
+        };
+
+        ListItem::new(format!("{:>width$} {}", "", text, width = depth * 4))
     }
 
     pub fn as_list_item_tree(&self, depth: usize) -> Vec<ListItem> {
@@ -49,15 +53,22 @@ impl RandomiserOption {
 
 impl RandomiserOption {
     pub fn default_randomiser_options() -> Vec<RandomiserOption> {
-        vec![RandomiserOption {
-            name: "Seed".to_string(),
-            value: RandomiserOptionValue::Uint64(rand::random()),
-            children: vec![RandomiserOption {
-                name: "SEED CHILD???".to_string(),
+        vec![
+            RandomiserOption {
+                name: "Randomise Room Order".to_string(),
                 value: RandomiserOptionValue::Bool(false),
                 children: vec![],
-            }],
-        }]
+            },
+            RandomiserOption {
+                name: "Seed".to_string(),
+                value: RandomiserOptionValue::Uint64(rand::random()),
+                children: vec![RandomiserOption {
+                    name: "SEED CHILD???".to_string(),
+                    value: RandomiserOptionValue::Bool(false),
+                    children: vec![],
+                }],
+            },
+        ]
     }
 }
 
@@ -94,6 +105,40 @@ impl RandomiserState {
 
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
+    }
+
+    pub fn trigger(&mut self) {
+        if !self.focused {
+            // eprintln!(
+            //     "Error: MainOptionsList triggered when it was not focused. Ignoring this and continuing."
+            // );
+            return;
+        }
+
+        if let Some(index) = self.list_state.selected() {
+            match index {
+                0 => {
+                    let option = self.root_options.get_mut(index).unwrap();
+
+                    if let RandomiserOptionValue::Bool(b) = &mut option.value {
+                        *b = !*b;
+                        // println!(
+                        //     "Triggering {} to {}",
+                        //     option.name,
+                        //     if *b { "true" } else { "false" }
+                        // );
+                    }
+                }
+                _ => (),
+            }
+
+            // if index >= self.options.len() {
+            //     eprintln!("Error: Invalid option index selected: {}", index);
+            //     return;
+            // }
+        } else {
+            eprintln!("Error: No value selected in MainOptionsList. Unable to trigger.");
+        }
     }
 
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {

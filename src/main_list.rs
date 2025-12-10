@@ -52,6 +52,21 @@ impl Default for MainOptionsList {
 }
 
 impl MainOptionsList {
+    pub fn current_hovered_status(&self) -> MainOption {
+        self.list_state
+            .selected()
+            .and_then(|v| self.options.get(v).cloned())
+            .unwrap_or(MainOption::CreateRandomiser)
+    }
+
+    pub fn focused(&self) -> bool {
+        self.focused
+    }
+
+    pub fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
+    }
+
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
         const TODO_HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
         const NORMAL_ROW_BG: Color = SLATE.c950;
@@ -85,20 +100,5 @@ impl MainOptionsList {
         // We need to disambiguate this trait method as both `Widget` and `StatefulWidget` share the
         // same method name `render`.
         StatefulWidget::render(list, area, buf, &mut self.list_state);
-    }
-
-    pub fn current_hovered_status(&self) -> MainOption {
-        self.list_state
-            .selected()
-            .and_then(|v| self.options.get(v).cloned())
-            .unwrap_or(MainOption::CreateRandomiser)
-    }
-
-    pub fn focused(&self) -> bool {
-        self.focused
-    }
-
-    pub fn set_focused(&mut self, focused: bool) {
-        self.focused = focused;
     }
 }
