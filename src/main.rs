@@ -5,11 +5,11 @@ use ratatui::{
     buffer::Buffer,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     layout::{
-        Alignment::{self, Left, Right},
-        Constraint, Flex, Layout, Rect,
+        Alignment::{self},
+        Constraint, Layout, Rect,
     },
     style::Stylize,
-    widgets::{Block, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, Paragraph, Widget},
 };
 
 use color_eyre::Result;
@@ -17,7 +17,6 @@ use color_eyre::Result;
 use crate::{
     main_list::{MainOption, MainOptionsList},
     randomiser::RandomiserState,
-    styles::FOCUSED_STYLE,
 };
 
 mod main_list;
@@ -29,7 +28,6 @@ struct App {
     should_exit: bool,
     main_options_list: MainOptionsList,
     randomiser_state: RandomiserState,
-    randomiser_list_state: ListState,
 }
 
 impl Default for App {
@@ -38,7 +36,6 @@ impl Default for App {
             should_exit: false,
             randomiser_state: Default::default(),
             main_options_list: Default::default(),
-            randomiser_list_state: Default::default(),
         }
     }
 }
@@ -125,6 +122,12 @@ impl App {
             match direction {
                 MoveDirection::Down => self.main_options_list.list_state.select_next(),
                 MoveDirection::Up => self.main_options_list.list_state.select_previous(),
+                _ => (),
+            }
+        } else if self.randomiser_state.focused() {
+            match direction {
+                MoveDirection::Down => self.randomiser_state.list_state.select_next(),
+                MoveDirection::Up => self.randomiser_state.list_state.select_previous(),
                 _ => (),
             }
         }
