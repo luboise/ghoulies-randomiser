@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -10,12 +9,13 @@ use ratatui::{
     widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, StatefulWidget},
 };
 
-use crate::styles::{FOCUSED_STYLE, HOVERING_STYLE, NORMAL_ROW_BG, TODO_HEADER_STYLE};
+use crate::styles::{FOCUSED_STYLE, NORMAL_ROW_BG, TODO_HEADER_STYLE};
 
 #[derive(Debug, Clone)]
 pub enum MainOption {
     CreateRandomiser,
     BuildAssetLibrary,
+    Randomise,
 }
 
 impl Display for MainOption {
@@ -26,6 +26,7 @@ impl Display for MainOption {
             match self {
                 MainOption::CreateRandomiser => "Create a randomiser",
                 MainOption::BuildAssetLibrary => "Game Manager",
+                MainOption::Randomise => "Randomise the game",
             }
         )
     }
@@ -41,7 +42,12 @@ pub struct MainOptionsList {
 impl Default for MainOptionsList {
     fn default() -> Self {
         Self {
-            options: [MainOption::CreateRandomiser, MainOption::BuildAssetLibrary].to_vec(),
+            options: [
+                MainOption::CreateRandomiser,
+                MainOption::BuildAssetLibrary,
+                MainOption::Randomise,
+            ]
+            .to_vec(),
             list_state: Default::default(),
             focused: true,
         }

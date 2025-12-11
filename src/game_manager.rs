@@ -1,4 +1,11 @@
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{
+    fmt::Display,
+    fs, io,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    thread::sleep,
+    time::Duration,
+};
 
 use ratatui::{
     buffer::Buffer,
@@ -43,6 +50,8 @@ pub struct GameManager {
     iso_name: PathBuf,
     list_state: ListState,
     game_state: GameState,
+
+    extracting: Arc<Mutex<bool>>,
 }
 
 impl Default for GameManager {
@@ -54,8 +63,9 @@ impl Default for GameManager {
             focused: false,
             data_folder: "./data".into(),
             iso_name: "game.iso".into(),
-            list_state: list_state,
+            list_state,
             game_state: GameState::Unextracted,
+            extracting: Arc::new(false.into()),
         };
 
         game_manager.refresh_game().unwrap_or_default();
@@ -92,6 +102,12 @@ const ACTIONS: [GameManagerAction; 3] = [
 
 impl GameManager {
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
+        if *self.extracting.lock().unwrap() {
+            Paragraph::new("Please wait for the file extraction to complete.").render(area, buf);
+
+            return;
+        }
+
         let [options_area, data_area] =
             Layout::horizontal([Constraint::Fill(2), Constraint::Fill(5)]).areas(area);
 
@@ -102,7 +118,7 @@ Game state: {game_state}
 
 {details}
 ",
-            iso_location = self.iso_name.display(),
+            iso_location = self.data_folder.join(&self.iso_name).display(),
             game_state = self.game_state,
             details = match &self.game_state {
                 GameState::Valid =>
@@ -147,7 +163,33 @@ Game state: {game_state}
     }
 
     pub fn extract_game(&mut self) {
-        todo!();
+        *self.extracting.lock().unwrap() = true;
+
+        let extract_xiso_path: PathBuf = "extract-xiso".into();
+        let iso_path = self
+            .data_folder
+            .canonicalize()
+            .unwrap()
+            .join(&self.iso_name);
+        let extraction_path = self.data_folder.join("game");
+
+        if !iso_path.is_file() {
+            eprintln!("File {} does not exist.", iso_path.display());
+        }
+
+        match xbpatch_core::iso_handling::extract_iso(
+            &extract_xiso_path,
+            &iso_path,
+            &extraction_path,
+        ) {
+            Ok(_) => {}
+            Err(_error) => {
+                // TODO: Log the error or display it somehow
+            }
+        };
+
+        *self.extracting.lock().unwrap() = false;
+        self.refresh_game().unwrap_or_default();
     }
 
     pub fn refresh_game(&mut self) -> Result<(), String> {
@@ -155,7 +197,7 @@ Game state: {game_state}
             fs::create_dir_all(&self.data_folder).map_err(|e| e.to_string())?;
         }
 
-        let game_files_path: PathBuf = self.data_folder.join("game_files");
+        let game_files_path: PathBuf = self.data_folder.join("game");
         if !game_files_path.is_dir() {
             self.game_state = GameState::Unextracted;
             return Ok(());
@@ -184,8 +226,10 @@ Game state: {game_state}
         Ok(())
     }
 
-    pub fn clear_temp_files(&mut self) -> Result<(), String> {
-        self.refresh_game()?;
+    pub fn clear_temp_files(&mut self) -> Result<(), io::Error> {
+        fs::remove_dir_all(self.data_folder.join("game"))?;
+
+        self.refresh_game().unwrap_or_default();
 
         Ok(())
     }
@@ -227,5 +271,13 @@ Game state: {game_state}
 
     pub fn focused(&self) -> bool {
         self.focused
+    }
+
+    pub fn extracting(&self) -> bool {
+        *self.extracting.lock().unwrap()
+    }
+
+    pub fn data_folder(&self) -> &PathBuf {
+        &self.data_folder
     }
 }

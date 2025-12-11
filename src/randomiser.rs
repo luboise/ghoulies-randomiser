@@ -1,10 +1,14 @@
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use bnl::{
     BNLError, BNLFile,
     asset::{Asset, aidlist::AidList},
     modding::Mod,
 };
+use fs_extra::dir::CopyOptions;
 use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use ratatui::{
     buffer::Buffer,
@@ -173,13 +177,6 @@ impl RandomiserState {
             return;
         };
 
-        // If we selected the last option
-        if index == self.root_options.len() {
-            randomise_game(self, env::args().collect::<Vec<String>>().get(1).unwrap())
-                .expect("Failed to randomise game.");
-            return;
-        }
-
         let Some(option) = self.root_options.get_mut(index) else {
             return;
         };
@@ -266,8 +263,6 @@ impl RandomiserState {
                 .collect()
         };
 
-        items.push(ListItem::new("Create."));
-
         let list = if self.focused {
             List::new(items)
                 .block(block)
@@ -287,13 +282,32 @@ impl RandomiserState {
 
 pub fn randomise_game<P: AsRef<Path>>(
     state: &RandomiserState,
-    common_bnl_path: P,
+    game_folder_path: P,
 ) -> Result<(), BNLError> {
+    let temp_folder_path: PathBuf = "./TEMP_FOLDER".into();
+
+    if fs::exists(&temp_folder_path)? {
+        fs::remove_dir_all(&temp_folder_path)?;
+    }
+
+    // fs::create_dir_all(&temp_folder_path)?;
+
+    let mut copy_options = CopyOptions::new();
+
+    copy_options.copy_inside = true;
+
+    fs_extra::copy_items(
+        &[game_folder_path.as_ref()],
+        &temp_folder_path,
+        &copy_options,
+    )
+    .map_err(|e| BNLError::DataReadError(e.to_string()))?;
+
+    let common_bnl_path: PathBuf = temp_folder_path.join("bundles").join("common.bnl");
     let mut bnl = BNLFile::from_bytes(&fs::read(&common_bnl_path)?)?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-
-    let out_dir = "./out";
+    let out_iso_path = format!("./ghoulies_randomised_{timestamp}.iso");
 
     let mut randomiser_mod = Mod::new("Randomiser");
 
@@ -303,7 +317,7 @@ pub fn randomise_game<P: AsRef<Path>>(
     });
 
     let randomise_rooms =
-        if let RandomiserOptionValue::Bool(b) = state.root_options.get(0).unwrap().value {
+        if let RandomiserOptionValue::Bool(b) = state.root_options.first().unwrap().value {
             b
         } else {
             false
@@ -338,24 +352,16 @@ pub fn randomise_game<P: AsRef<Path>>(
     )
     .expect("Failed to remove aidlist");
 
-    fs::create_dir_all(out_dir).expect("Failed to create out dir.");
+    // Write the modified bnl back to disk
+    fs::write(common_bnl_path, bnl.to_bytes())?;
 
-    fs::copy(
-        &common_bnl_path,
-        format!(
-            "{out_dir}/{}_backup_{}",
-            &common_bnl_path
-                .as_ref()
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            timestamp
-        ),
-    )
-    .expect("Failed to backup bnl file.");
+    xbpatch_core::iso_handling::create_iso(
+        Path::new("extract-xiso"),
+        &Path::new(&out_iso_path).to_path_buf(),
+        &temp_folder_path,
+    )?;
 
-    fs::write(common_bnl_path, bnl.to_bytes()).expect("Failed to write new bnl.");
+    fs::remove_dir_all(temp_folder_path)?;
 
     Ok(())
 }

@@ -3,12 +3,12 @@ mod styles;
 use ratatui::{
     DefaultTerminal,
     buffer::Buffer,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{
         Alignment::{self},
         Constraint, Layout, Rect,
     },
-    style::Stylize,
+    style::{Modifier, Stylize},
     widgets::{Block, Paragraph, Widget},
 };
 
@@ -17,7 +17,7 @@ use color_eyre::Result;
 use crate::{
     game_manager::GameManager,
     main_list::{MainOption, MainOptionsList},
-    randomiser::RandomiserState,
+    randomiser::{RandomiserState, randomise_game},
 };
 
 mod game_manager;
@@ -117,6 +117,7 @@ impl App {
             MainOption::BuildAssetLibrary => {
                 self.game_manager.render(area, buf);
             }
+            MainOption::Randomise => Paragraph::new("Randomise the game.").render(area, buf),
         }
     }
 
@@ -158,6 +159,11 @@ impl App {
         }
 
         match key.code {
+            KeyCode::Char('c') => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.should_exit = true;
+                }
+            }
             // KeyCode::Char('h') | KeyCode::Left => self.select_none(),
             // KeyCode::Char('l') | KeyCode::Right => self.select_none(),
             KeyCode::Char('j') | KeyCode::Down => self.move_in_direction(MoveDirection::Down),
@@ -172,6 +178,16 @@ impl App {
                         }
                         MainOption::BuildAssetLibrary => {
                             self.game_manager.set_focused(true);
+                        }
+                        MainOption::Randomise => {
+                            match randomise_game(
+                                &self.randomiser_state,
+                                self.game_manager.data_folder().join("game"),
+                            ) {
+                                Ok(_) => (),
+                                Err(e) => eprintln!("{:?}", e),
+                            };
+                            return;
                         }
                     }
 
