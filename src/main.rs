@@ -15,12 +15,13 @@ use ratatui::{
 use color_eyre::Result;
 
 use crate::{
+    game_manager::GameManager,
     main_list::{MainOption, MainOptionsList},
     randomiser::RandomiserState,
 };
 
+mod game_manager;
 mod main_list;
-
 mod randomiser;
 
 #[derive(Debug)]
@@ -28,6 +29,7 @@ struct App {
     should_exit: bool,
     main_options_list: MainOptionsList,
     randomiser_state: RandomiserState,
+    game_manager: GameManager,
 }
 
 impl Default for App {
@@ -36,6 +38,7 @@ impl Default for App {
             should_exit: false,
             randomiser_state: Default::default(),
             main_options_list: Default::default(),
+            game_manager: Default::default(),
         }
     }
 }
@@ -112,7 +115,7 @@ impl App {
         match self.main_options_list.current_hovered_status() {
             MainOption::CreateRandomiser => self.randomiser_state.render(area, buf),
             MainOption::BuildAssetLibrary => {
-                Paragraph::new("Build asset library coming soon").render(area, buf);
+                self.game_manager.render(area, buf);
             }
         }
     }
@@ -133,6 +136,9 @@ impl App {
         } else if self.randomiser_state.focused() {
             self.randomiser_state.set_focused(false);
             self.main_options_list.set_focused(true);
+        } else if self.game_manager.focused() {
+            self.game_manager.set_focused(false);
+            self.main_options_list.set_focused(true);
         }
     }
 
@@ -141,12 +147,17 @@ impl App {
             return;
         }
 
-        if self.randomiser_state.focused() {
+        // Handle quit actions early
+        if key.code == KeyCode::Char('q') || key.code == KeyCode::Esc {
+            self.go_back();
+            return;
+        } else if self.randomiser_state.focused() {
             self.randomiser_state.handle_key(key);
+        } else if self.game_manager.focused() {
+            self.game_manager.handle_key(key);
         }
 
         match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => self.go_back(),
             // KeyCode::Char('h') | KeyCode::Left => self.select_none(),
             // KeyCode::Char('l') | KeyCode::Right => self.select_none(),
             KeyCode::Char('j') | KeyCode::Down => self.move_in_direction(MoveDirection::Down),
@@ -159,12 +170,12 @@ impl App {
                         MainOption::CreateRandomiser => {
                             self.randomiser_state.set_focused(true);
                         }
-                        MainOption::BuildAssetLibrary => return,
+                        MainOption::BuildAssetLibrary => {
+                            self.game_manager.set_focused(true);
+                        }
                     }
 
                     self.main_options_list.set_focused(false);
-                } else if self.randomiser_state.focused() {
-                    self.randomiser_state.trigger();
                 }
             }
             _ => {}

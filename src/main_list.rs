@@ -4,16 +4,13 @@ use color_eyre::owo_colors::OwoColorize;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{
-        Color, Modifier, Style, Stylize,
-        palette::tailwind::{BLUE, GREEN, SLATE},
-    },
+    style::Stylize,
     symbols,
     text::Line,
     widgets::{Block, Borders, HighlightSpacing, List, ListItem, ListState, StatefulWidget},
 };
 
-use crate::styles::{FOCUSED_STYLE, HOVERING_STYLE};
+use crate::styles::{FOCUSED_STYLE, HOVERING_STYLE, NORMAL_ROW_BG, TODO_HEADER_STYLE};
 
 #[derive(Debug, Clone)]
 pub enum MainOption {
@@ -28,7 +25,7 @@ impl Display for MainOption {
             "{}",
             match self {
                 MainOption::CreateRandomiser => "Create a randomiser",
-                MainOption::BuildAssetLibrary => "Build asset library",
+                MainOption::BuildAssetLibrary => "Game Manager",
             }
         )
     }
@@ -68,9 +65,6 @@ impl MainOptionsList {
     }
 
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
-        const TODO_HEADER_STYLE: Style = Style::new().fg(SLATE.c100).bg(BLUE.c800);
-        const NORMAL_ROW_BG: Color = SLATE.c950;
-
         let block = Block::new()
             .title(Line::raw("Options").centered())
             .borders(Borders::RIGHT | Borders::TOP | Borders::BOTTOM)

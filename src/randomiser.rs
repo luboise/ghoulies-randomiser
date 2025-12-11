@@ -225,7 +225,9 @@ impl RandomiserState {
                     RandomiserOptionValue::Float(_) => todo!(),
                 }
             }
-
+            KeyCode::Enter => {
+                self.trigger();
+            }
             _ => (),
         }
     }
