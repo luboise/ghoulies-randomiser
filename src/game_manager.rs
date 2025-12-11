@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::PathBuf};
+use std::{fmt::Display, fs, path::PathBuf};
 
 use ratatui::{
     buffer::Buffer,
@@ -16,11 +16,33 @@ use ratatui::{
 use crate::styles::{FOCUSED_STYLE, NORMAL_ROW_BG, TODO_HEADER_STYLE};
 
 #[derive(Debug)]
+pub enum GameState {
+    Valid,
+    Unextracted,
+    Invalid(String),
+}
+
+impl Display for GameState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                GameState::Valid => "Valid".to_string(),
+                GameState::Unextracted => "Unextracted".to_string(),
+                GameState::Invalid(e) => format!("Invalid: {}", e),
+            }
+        )
+    }
+}
+
+#[derive(Debug)]
 pub struct GameManager {
     focused: bool,
     data_folder: PathBuf,
     iso_name: PathBuf,
     list_state: ListState,
+    game_state: GameState,
 }
 
 impl Default for GameManager {
@@ -28,18 +50,24 @@ impl Default for GameManager {
         let mut list_state = ListState::default();
         list_state.select_first();
 
-        Self {
+        let mut game_manager = Self {
             focused: false,
             data_folder: "./data".into(),
             iso_name: "game.iso".into(),
             list_state: list_state,
-        }
+            game_state: GameState::Unextracted,
+        };
+
+        game_manager.refresh_game().unwrap_or_default();
+        game_manager
     }
 }
 
+#[derive(Debug)]
 enum GameManagerAction {
     ExtractGame,
     Refresh,
+    ClearTempFiles,
 }
 
 impl Display for GameManagerAction {
@@ -50,13 +78,17 @@ impl Display for GameManagerAction {
             match self {
                 GameManagerAction::ExtractGame => "Extract the game",
                 GameManagerAction::Refresh => "Refresh",
+                GameManagerAction::ClearTempFiles => "Clear temporary files",
             }
         )
     }
 }
 
-const ACTIONS: [GameManagerAction; 2] =
-    [GameManagerAction::Refresh, GameManagerAction::ExtractGame];
+const ACTIONS: [GameManagerAction; 3] = [
+    GameManagerAction::Refresh,
+    GameManagerAction::ExtractGame,
+    GameManagerAction::ClearTempFiles,
+];
 
 impl GameManager {
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {
@@ -64,8 +96,22 @@ impl GameManager {
             Layout::horizontal([Constraint::Fill(2), Constraint::Fill(5)]).areas(area);
 
         let output = format!(
-            "Game iso location: {iso_location}",
-            iso_location = self.iso_name.display()
+            r"
+Game iso location: {iso_location}
+Game state: {game_state}
+
+{details}
+",
+            iso_location = self.iso_name.display(),
+            game_state = self.game_state,
+            details = match &self.game_state {
+                GameState::Valid =>
+                    "The game files have been validated, and a randomiser can be created from these files.".to_string(),
+                GameState::Unextracted =>
+                    "The game files have not been extracted yet. Select \"Extract Game files\" to extract them.".to_string(),
+                GameState::Invalid(e) => format!(
+                    "The game files are in an invalid state. Error: {}\n\nYou can wipe the temporary files by selecting the \"Clear temporary files\" option.", e.to_string()),
+            }
         );
 
         Paragraph::new(output)
@@ -100,10 +146,77 @@ impl GameManager {
         StatefulWidget::render(list, options_area, buf, &mut self.list_state);
     }
 
+    pub fn extract_game(&mut self) {
+        todo!();
+    }
+
+    pub fn refresh_game(&mut self) -> Result<(), String> {
+        if !self.data_folder.exists() {
+            fs::create_dir_all(&self.data_folder).map_err(|e| e.to_string())?;
+        }
+
+        let game_files_path: PathBuf = self.data_folder.join("game_files");
+        if !game_files_path.is_dir() {
+            self.game_state = GameState::Unextracted;
+            return Ok(());
+        }
+
+        let default_xbe_path = game_files_path.join("default.xbe");
+        if !default_xbe_path.is_file() {
+            self.game_state = GameState::Invalid(format!(
+                "File \"default.xbe\" could not be found at {}",
+                default_xbe_path.display()
+            ))
+        }
+
+        let bundles_path = game_files_path.join("bundles");
+        if !bundles_path.is_dir() {
+            self.game_state = GameState::Invalid(format!(
+                "File \"default.xbe\" could not be found at {}",
+                default_xbe_path.display()
+            ));
+
+            return Ok(());
+        }
+
+        self.game_state = GameState::Valid;
+
+        Ok(())
+    }
+
+    pub fn clear_temp_files(&mut self) -> Result<(), String> {
+        self.refresh_game()?;
+
+        Ok(())
+    }
+
+    pub fn trigger(&mut self) {
+        let Some(index) = self.list_state.selected() else {
+            return;
+        };
+
+        if index >= ACTIONS.len() {
+            return;
+        }
+
+        match ACTIONS[index] {
+            GameManagerAction::ExtractGame => {
+                self.extract_game();
+            }
+            GameManagerAction::Refresh => {
+                self.refresh_game().unwrap_or_default();
+            }
+            GameManagerAction::ClearTempFiles => {
+                self.clear_temp_files().unwrap_or_default();
+            }
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.list_state.select_next(),
             KeyCode::Char('k') | KeyCode::Up => self.list_state.select_previous(),
+            KeyCode::Enter => self.trigger(),
             _ => (),
         }
     }
