@@ -8,6 +8,7 @@ use bnl::{
 use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use ratatui::{
     buffer::Buffer,
+    crossterm::event::{KeyCode, KeyEvent},
     layout::Rect,
     style::{
         Color, Style, Stylize,
@@ -188,6 +189,61 @@ impl RandomiserState {
             RandomiserOptionValue::Float(f) => *f = rand::random(),
             RandomiserOptionValue::Uint64(u) => *u = rand::random(),
         }
+    }
+
+    pub fn handle_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Down | KeyCode::Char('j') => self.list_state.select_next(),
+            KeyCode::Up | KeyCode::Char('k') => self.list_state.select_previous(),
+            KeyCode::Backspace => {
+                let Some(option) = self.get_current_randomiser_option_mut() else {
+                    return;
+                };
+
+                match &mut option.value {
+                    RandomiserOptionValue::Float(_) => (),
+                    RandomiserOptionValue::Bool(v) => *v = !*v,
+                    RandomiserOptionValue::Uint64(v) => *v = v.saturating_div(10),
+                }
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let num: u64 = c.to_digit(10).unwrap_or(0).into();
+
+                let Some(option) = self.get_current_randomiser_option_mut() else {
+                    return;
+                };
+
+                match &mut option.value {
+                    RandomiserOptionValue::Uint64(v) => {
+                        *v = v
+                            .checked_mul(10)
+                            .unwrap_or(*v)
+                            .checked_add(num)
+                            .unwrap_or(*v)
+                    }
+                    RandomiserOptionValue::Bool(_) => (),
+                    RandomiserOptionValue::Float(_) => todo!(),
+                }
+            }
+
+            _ => (),
+        }
+    }
+
+    pub fn get_current_randomiser_option(&self) -> Option<&RandomiserOption> {
+        let Some(index) = self.list_state.selected() else {
+            return None;
+        };
+
+        self.root_options.get(index)
+    }
+
+    pub fn get_current_randomiser_option_mut(&mut self) -> Option<&mut RandomiserOption> {
+        let Some(index) = self.list_state.selected() else {
+            return None;
+        };
+
+        self.root_options.get_mut(index)
     }
 
     pub fn render(&mut self, area: Rect, buf: &mut Buffer) {

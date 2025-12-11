@@ -124,12 +124,6 @@ impl App {
                 MoveDirection::Up => self.main_options_list.list_state.select_previous(),
                 _ => (),
             }
-        } else if self.randomiser_state.focused() {
-            match direction {
-                MoveDirection::Down => self.randomiser_state.list_state.select_next(),
-                MoveDirection::Up => self.randomiser_state.list_state.select_previous(),
-                _ => (),
-            }
         }
     }
 
@@ -146,6 +140,11 @@ impl App {
         if key.kind != KeyEventKind::Press {
             return;
         }
+
+        if self.randomiser_state.focused() {
+            self.randomiser_state.handle_key(key);
+        }
+
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.go_back(),
             // KeyCode::Char('h') | KeyCode::Left => self.select_none(),
